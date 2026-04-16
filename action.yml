@@ -22,6 +22,10 @@ inputs:
     description: Path to ignore file relative to repository root.
     required: false
     default: ".filenameignore"
+  dotfile-mode:
+    description: How to handle dot-prefixed names (strip-leading-dot or ignore).
+    required: false
+    default: "strip-leading-dot"
 
 runs:
   using: composite
@@ -34,4 +38,5 @@ runs:
           --max-path-length "${{ inputs.max-path-length }}" \
           --max-depth "${{ inputs.max-depth }}" \
           --file-types "${{ inputs.file-types }}" \
-          --ignore-file "${{ inputs.ignore-file }}"
+          --ignore-file "${{ inputs.ignore-file }}" \
+          --dotfile-mode "${{ inputs.dotfile-mode }}"

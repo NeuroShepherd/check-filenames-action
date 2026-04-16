@@ -11,6 +11,7 @@ Opinionated GitHub Action to validate file and folder naming conventions.
 - Warns on deep file nesting (default max depth: 2)
 - Lets users filter by file types (for example: `html,md`)
 - Supports ignore patterns via `.filenameignore`
+- Supports configurable dotfile handling
 
 ## Naming Rule
 
@@ -31,6 +32,7 @@ Examples:
 - `max-depth`: warn when nesting is deeper than this value (default: `2`)
 - `file-types`: comma-separated extensions to check, or `all` (default: `all`)
 - `ignore-file`: ignore file path relative to repository root (default: `.filenameignore`)
+- `dotfile-mode`: dotfile handling mode, either `strip-leading-dot` or `ignore` (default: `strip-leading-dot`)
 
 ## Usage
 
@@ -56,7 +58,13 @@ jobs:
           max-depth: "2"
           file-types: "html,md"
           ignore-file: ".filenameignore"
+          dotfile-mode: "strip-leading-dot"
 ```
+
+Dotfile modes:
+
+- `strip-leading-dot`: evaluate names after removing one leading `.`
+- `ignore`: skip dot-prefixed files and directories entirely
 
 ## .filenameignore
 

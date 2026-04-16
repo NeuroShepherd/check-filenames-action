@@ -1,0 +1,37 @@
+name: Check Filenames Action
+description: Opinionated checks for file and folder naming conventions.
+author: NeuroShepherd
+branding:
+  icon: check-square
+  color: blue
+
+inputs:
+  max-path-length:
+    description: Warn when a relative path exceeds this length.
+    required: false
+    default: "65"
+  max-depth:
+    description: Warn when file nesting exceeds this depth.
+    required: false
+    default: "2"
+  file-types:
+    description: Comma-separated file extensions to check, or all.
+    required: false
+    default: "all"
+  ignore-file:
+    description: Path to ignore file relative to repository root.
+    required: false
+    default: ".filenameignore"
+
+runs:
+  using: composite
+  steps:
+    - name: Run filename checks
+      shell: bash
+      run: |
+        python3 "${{ github.action_path }}/check-paths.py" \
+          --root "${{ github.workspace }}" \
+          --max-path-length "${{ inputs.max-path-length }}" \
+          --max-depth "${{ inputs.max-depth }}" \
+          --file-types "${{ inputs.file-types }}" \
+          --ignore-file "${{ inputs.ignore-file }}"

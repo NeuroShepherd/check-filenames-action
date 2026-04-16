@@ -17,5 +17,5 @@ jobs:
               with:
                   max-path-length: "65"
                   max-depth: "2"
-                  file-types: "html,md"
+                  file-types: "html,md,py,yml"
                   ignore-file: ".filenameignore"

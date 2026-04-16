@@ -24,6 +24,70 @@ class Finding:
     message: str
 
 
+def group_findings_by_path(
+    findings: list[Finding], severity: str
+) -> dict[str, set[str]]:
+    grouped: dict[str, set[str]] = {}
+    for finding in findings:
+        if finding.severity != severity:
+            continue
+        grouped.setdefault(finding.path, set()).add(finding.message)
+    return grouped
+
+
+def print_grouped_findings(title: str, marker: str, grouped: dict[str, set[str]]) -> None:
+    if not grouped:
+        return
+
+    print(f"::group::{title}")
+    for path in sorted(grouped):
+        print(f"{marker} {path}")
+        for message in sorted(grouped[path]):
+            print(f"  - {message}")
+    print("::endgroup::")
+
+
+def append_step_summary(
+    checked_file_count: int,
+    error_count: int,
+    warning_count: int,
+    error_groups: dict[str, set[str]],
+    warning_groups: dict[str, set[str]],
+) -> None:
+    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not summary_path:
+        return
+
+    lines: list[str] = []
+    lines.append("## Filename Check Results")
+    lines.append("")
+    lines.append(f"- Checked files: {checked_file_count}")
+    lines.append(f"- Errors: {error_count}")
+    lines.append(f"- Warnings: {warning_count}")
+    lines.append("")
+
+    if error_groups:
+        lines.append("### Failed Paths")
+        lines.append("")
+        for path in sorted(error_groups):
+            lines.append(f"- {path}")
+            for message in sorted(error_groups[path]):
+                lines.append(f"  - {message}")
+        lines.append("")
+
+    if warning_groups:
+        lines.append("### Warnings")
+        lines.append("")
+        for path in sorted(warning_groups):
+            lines.append(f"- {path}")
+            for message in sorted(warning_groups[path]):
+                lines.append(f"  - {message}")
+        lines.append("")
+
+    with open(summary_path, "a", encoding="utf-8") as summary_file:
+        summary_file.write("\n".join(lines) + "\n")
+
+
 def parse_file_types(raw_file_types: str) -> set[str] | None:
     if not raw_file_types:
         return None
@@ -56,7 +120,17 @@ def load_ignore_patterns(root: Path, ignore_file: str) -> list[str]:
         pattern = line.strip()
         if not pattern or pattern.startswith("#"):
             continue
-        patterns.append(pattern.replace("\\", "/").lstrip("./"))
+
+        # Normalize separators and root-relative prefixes without stripping
+        # leading dots from dotfile names (for example: .venv).
+        pattern = pattern.replace("\\", "/")
+        if pattern.startswith("./"):
+            pattern = pattern[2:]
+        elif pattern.startswith("/"):
+            pattern = pattern[1:]
+
+        if pattern:
+            patterns.append(pattern)
     return patterns
 
 
@@ -80,9 +154,15 @@ def check_kebab_case(name: str) -> bool:
     return bool(VALID_NAME_PATTERN.fullmatch(name))
 
 
-def check_file_name(path: Path) -> list[str]:
+def normalize_dot_name(name: str, dotfile_mode: str) -> str:
+    if dotfile_mode == "strip-leading-dot" and name.startswith("."):
+        return name[1:]
+    return name
+
+
+def check_file_name(path: Path, dotfile_mode: str) -> list[str]:
     issues: list[str] = []
-    stem = path.stem
+    stem = normalize_dot_name(path.stem, dotfile_mode)
 
     if not check_kebab_case(stem):
         issues.append(
@@ -98,7 +178,8 @@ def check_file_name(path: Path) -> list[str]:
     return issues
 
 
-def check_directory_name(name: str) -> list[str]:
+def check_directory_name(name: str, dotfile_mode: str) -> list[str]:
+    name = normalize_dot_name(name, dotfile_mode)
     if check_kebab_case(name):
         return []
     return [
@@ -135,6 +216,12 @@ def main() -> int:
         default=".filenameignore",
         help="Path to ignore file relative to root",
     )
+    parser.add_argument(
+        "--dotfile-mode",
+        default="strip-leading-dot",
+        choices=["strip-leading-dot", "ignore"],
+        help="How to handle dot-prefixed names: strip-leading-dot or ignore",
+    )
 
     args = parser.parse_args()
     if args.max_path_length < 1:
@@ -163,6 +250,8 @@ def main() -> int:
         for directory in dir_names:
             if directory == ".git":
                 continue
+            if args.dotfile_mode == "ignore" and directory.startswith("."):
+                continue
             full_dir = current_dir / directory
             rel_dir = relative_posix(full_dir, root)
             if is_ignored(rel_dir, ignore_patterns):
@@ -171,6 +260,9 @@ def main() -> int:
         dir_names[:] = kept_dirs
 
         for file_name in file_names:
+            if args.dotfile_mode == "ignore" and file_name.startswith("."):
+                continue
+
             file_path = current_dir / file_name
             rel_file = relative_posix(file_path, root)
 
@@ -184,7 +276,7 @@ def main() -> int:
 
             checked_file_count += 1
 
-            for issue in check_file_name(file_path):
+            for issue in check_file_name(file_path, args.dotfile_mode):
                 findings.append(Finding("error", rel_file, issue))
 
             parent = file_path.relative_to(root).parent
@@ -197,7 +289,7 @@ def main() -> int:
                         continue
                     checked_directory_paths.add(rel_dir)
 
-                    for issue in check_directory_name(part):
+                    for issue in check_directory_name(part, args.dotfile_mode):
                         findings.append(Finding("error", rel_dir, issue))
 
                     if len(rel_dir) > args.max_path_length:
@@ -238,6 +330,20 @@ def main() -> int:
         else:
             warning_count += 1
             print(f"::warning file={finding.path}::{finding.message}")
+
+    error_groups = group_findings_by_path(findings, "error")
+    warning_groups = group_findings_by_path(findings, "warning")
+
+    print_grouped_findings("Failed Paths", "FAILED", error_groups)
+    print_grouped_findings("Warning Paths", "WARN", warning_groups)
+
+    append_step_summary(
+        checked_file_count,
+        error_count,
+        warning_count,
+        error_groups,
+        warning_groups,
+    )
 
     if checked_file_count == 0:
         print("::warning::No files matched the selected file-types filter.")

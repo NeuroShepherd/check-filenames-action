@@ -38,6 +38,7 @@ Examples:
 name: Filename Checks
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
     branches:

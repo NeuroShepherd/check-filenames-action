@@ -1,0 +1,5 @@
+# One pattern per line.
+# Supports exact paths, globs, and folder prefixes ending in '/'.
+# Example:
+# docs/*.md
+# vendor/

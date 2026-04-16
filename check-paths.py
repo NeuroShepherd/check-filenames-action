@@ -24,6 +24,70 @@ class Finding:
     message: str
 
 
+def group_findings_by_path(
+    findings: list[Finding], severity: str
+) -> dict[str, set[str]]:
+    grouped: dict[str, set[str]] = {}
+    for finding in findings:
+        if finding.severity != severity:
+            continue
+        grouped.setdefault(finding.path, set()).add(finding.message)
+    return grouped
+
+
+def print_grouped_findings(title: str, marker: str, grouped: dict[str, set[str]]) -> None:
+    if not grouped:
+        return
+
+    print(f"::group::{title}")
+    for path in sorted(grouped):
+        print(f"{marker} {path}")
+        for message in sorted(grouped[path]):
+            print(f"  - {message}")
+    print("::endgroup::")
+
+
+def append_step_summary(
+    checked_file_count: int,
+    error_count: int,
+    warning_count: int,
+    error_groups: dict[str, set[str]],
+    warning_groups: dict[str, set[str]],
+) -> None:
+    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not summary_path:
+        return
+
+    lines: list[str] = []
+    lines.append("## Filename Check Results")
+    lines.append("")
+    lines.append(f"- Checked files: {checked_file_count}")
+    lines.append(f"- Errors: {error_count}")
+    lines.append(f"- Warnings: {warning_count}")
+    lines.append("")
+
+    if error_groups:
+        lines.append("### Failed Paths")
+        lines.append("")
+        for path in sorted(error_groups):
+            lines.append(f"- {path}")
+            for message in sorted(error_groups[path]):
+                lines.append(f"  - {message}")
+        lines.append("")
+
+    if warning_groups:
+        lines.append("### Warnings")
+        lines.append("")
+        for path in sorted(warning_groups):
+            lines.append(f"- {path}")
+            for message in sorted(warning_groups[path]):
+                lines.append(f"  - {message}")
+        lines.append("")
+
+    with open(summary_path, "a", encoding="utf-8") as summary_file:
+        summary_file.write("\n".join(lines) + "\n")
+
+
 def parse_file_types(raw_file_types: str) -> set[str] | None:
     if not raw_file_types:
         return None
@@ -238,6 +302,20 @@ def main() -> int:
         else:
             warning_count += 1
             print(f"::warning file={finding.path}::{finding.message}")
+
+    error_groups = group_findings_by_path(findings, "error")
+    warning_groups = group_findings_by_path(findings, "warning")
+
+    print_grouped_findings("Failed Paths", "FAILED", error_groups)
+    print_grouped_findings("Warning Paths", "WARN", warning_groups)
+
+    append_step_summary(
+        checked_file_count,
+        error_count,
+        warning_count,
+        error_groups,
+        warning_groups,
+    )
 
     if checked_file_count == 0:
         print("::warning::No files matched the selected file-types filter.")

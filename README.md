@@ -5,7 +5,7 @@ Opinionated GitHub Action to validate file and folder naming conventions.
 ## What It Checks
 
 - Enforces lowercase kebab-case names
-- Enforces letters only in names
+- Enforces letters and dashes only in names
 - Enforces lowercase-only file extensions
 - Warns on long relative paths (default limit: 65)
 - Warns on deep file nesting (default max depth: 2)
@@ -17,6 +17,8 @@ Opinionated GitHub Action to validate file and folder naming conventions.
 Names must match:
 
 - `^[a-z]+(?:-[a-z]+)*$`
+
+This allows lowercase letters with single dashes between words.
 
 Examples:
 

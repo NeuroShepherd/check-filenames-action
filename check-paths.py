@@ -85,7 +85,9 @@ def check_file_name(path: Path) -> list[str]:
     stem = path.stem
 
     if not check_kebab_case(stem):
-        issues.append("filename stem must use lowercase kebab-case with letters only")
+        issues.append(
+            "filename stem must use lowercase kebab-case with letters and dashes only"
+        )
 
     for suffix in path.suffixes:
         ext = suffix.lstrip(".")
@@ -99,7 +101,9 @@ def check_file_name(path: Path) -> list[str]:
 def check_directory_name(name: str) -> list[str]:
     if check_kebab_case(name):
         return []
-    return ["directory name must use lowercase kebab-case with letters only"]
+    return [
+        "directory name must use lowercase kebab-case with letters and dashes only"
+    ]
 
 
 def relative_posix(path: Path, root: Path) -> str:

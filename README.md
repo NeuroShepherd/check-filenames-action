@@ -1,6 +1,6 @@
 # Check Filenames Action
 
-Opinionated GitHub Action to validate file and folder naming conventions.
+Opinionated GitHub Action to validate file and folder naming conventions with an emphasis on adhering to website path naming conventions. See Google's [URL structure best practices](https://developers.google.com/search/docs/crawling-indexing/url-structure) for an overview.
 
 ## What It Checks
 

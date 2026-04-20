@@ -26,6 +26,14 @@ inputs:
     description: How to handle dot-prefixed names (strip-leading-dot or ignore).
     required: false
     default: "strip-leading-dot"
+  allow-dates-in-file-names:
+    description: Allow one date fragment in filename stems.
+    required: false
+    default: "false"
+  date-format:
+    description: Date format for allowed filename date fragments (strftime directives).
+    required: false
+    default: "%Y-%m-%d"
 
 runs:
   using: composite
@@ -39,4 +47,6 @@ runs:
           --max-depth "${{ inputs.max-depth }}" \
           --file-types "${{ inputs.file-types }}" \
           --ignore-file "${{ inputs.ignore-file }}" \
-          --dotfile-mode "${{ inputs.dotfile-mode }}"
+          --dotfile-mode "${{ inputs.dotfile-mode }}" \
+          --allow-dates-in-file-names "${{ inputs.allow-dates-in-file-names }}" \
+          --date-format "${{ inputs.date-format }}"

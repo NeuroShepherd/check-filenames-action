@@ -60,8 +60,21 @@ class IgnorePatternTests(unittest.TestCase):
 
 class NameValidationTests(unittest.TestCase):
     def test_file_name_validation(self) -> None:
-        good = check_paths.check_file_name(Path("good-file.md"), "strip-leading-dot")
-        bad = check_paths.check_file_name(Path("bad_file.md"), "strip-leading-dot")
+        pattern = check_paths.build_date_pattern("%Y-%m-%d")
+        good = check_paths.check_file_name(
+            Path("good-file.md"),
+            "strip-leading-dot",
+            False,
+            "%Y-%m-%d",
+            pattern,
+        )
+        bad = check_paths.check_file_name(
+            Path("bad_file.md"),
+            "strip-leading-dot",
+            False,
+            "%Y-%m-%d",
+            pattern,
+        )
 
         self.assertEqual(good, [])
         self.assertEqual(
@@ -69,8 +82,62 @@ class NameValidationTests(unittest.TestCase):
             ["filename stem must use lowercase kebab-case with letters and dashes only"],
         )
 
+    def test_date_stem_allowed_when_enabled(self) -> None:
+        pattern = check_paths.build_date_pattern("%Y-%m-%d")
+        issues = check_paths.check_file_name(
+            Path("2020-05-01-my-file.md"),
+            "strip-leading-dot",
+            True,
+            "%Y-%m-%d",
+            pattern,
+        )
+        self.assertEqual(issues, [])
+
+    def test_numbers_not_allowed_when_not_a_valid_date(self) -> None:
+        pattern = check_paths.build_date_pattern("%Y-%m-%d")
+        issues = check_paths.check_file_name(
+            Path("file-123.md"),
+            "strip-leading-dot",
+            True,
+            "%Y-%m-%d",
+            pattern,
+        )
+        self.assertEqual(
+            issues,
+            ["filename stem must use lowercase kebab-case with letters and dashes only"],
+        )
+
+    def test_custom_date_format_with_compact_date(self) -> None:
+        pattern = check_paths.build_date_pattern("%Y%m%d")
+        issues = check_paths.check_file_name(
+            Path("20220511-name.html"),
+            "strip-leading-dot",
+            True,
+            "%Y%m%d",
+            pattern,
+        )
+        self.assertEqual(issues, [])
+
+    def test_custom_date_format_with_date_in_middle(self) -> None:
+        pattern = check_paths.build_date_pattern("%d-%m-%Y")
+        issues = check_paths.check_file_name(
+            Path("something-30-12-2025.md"),
+            "strip-leading-dot",
+            True,
+            "%d-%m-%Y",
+            pattern,
+        )
+        self.assertEqual(issues, [])
+
     def test_dotfile_name_strip_mode(self) -> None:
-        issues = check_paths.check_file_name(Path(".env"), "strip-leading-dot")
+        pattern = check_paths.build_date_pattern("%Y-%m-%d")
+        issues = check_paths.check_file_name(
+            Path(".env"),
+            "strip-leading-dot",
+            False,
+            "%Y-%m-%d",
+            pattern,
+        )
         self.assertEqual(issues, [])
 
     def test_directory_name_strip_mode(self) -> None:
@@ -79,7 +146,13 @@ class NameValidationTests(unittest.TestCase):
 
 
 class CLITests(unittest.TestCase):
-    def run_checker(self, root: Path, dotfile_mode: str) -> subprocess.CompletedProcess[str]:
+    def run_checker(
+        self,
+        root: Path,
+        dotfile_mode: str,
+        allow_dates_in_file_names: bool = False,
+        date_format: str = "%Y-%m-%d",
+    ) -> subprocess.CompletedProcess[str]:
         command = [
             sys.executable,
             str(SCRIPT_PATH),
@@ -89,6 +162,10 @@ class CLITests(unittest.TestCase):
             "py",
             "--dotfile-mode",
             dotfile_mode,
+            "--allow-dates-in-file-names",
+            str(allow_dates_in_file_names).lower(),
+            "--date-format",
+            date_format,
         ]
         return subprocess.run(command, check=False, capture_output=True, text=True)
 
@@ -116,6 +193,41 @@ class CLITests(unittest.TestCase):
             self.assertEqual(result.returncode, 1, msg=result.stdout + result.stderr)
             self.assertIn("::error file=.BadFolder::", result.stdout)
             self.assertIn("::group::Failed Paths", result.stdout)
+
+    def test_cli_allows_date_stem_with_default_format(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "2020-05-01-good-name.py").write_text("x = 1\n", encoding="utf-8")
+
+            result = self.run_checker(root, "strip-leading-dot", allow_dates_in_file_names=True)
+
+            self.assertEqual(result.returncode, 0, msg=result.stdout + result.stderr)
+            self.assertIn("Checked 1 files. Errors: 0. Warnings: 0.", result.stdout)
+
+    def test_cli_rejects_invalid_date_stem(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "2020-99-01-good-name.py").write_text("x = 1\n", encoding="utf-8")
+
+            result = self.run_checker(root, "strip-leading-dot", allow_dates_in_file_names=True)
+
+            self.assertEqual(result.returncode, 1, msg=result.stdout + result.stderr)
+            self.assertIn("::error file=2020-99-01-good-name.py::", result.stdout)
+
+    def test_cli_rejects_unsupported_date_directive(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "good-name.py").write_text("x = 1\n", encoding="utf-8")
+
+            result = self.run_checker(
+                root,
+                "strip-leading-dot",
+                allow_dates_in_file_names=True,
+                date_format="%Y-%U",
+            )
+
+            self.assertEqual(result.returncode, 2, msg=result.stdout + result.stderr)
+            self.assertIn("::error::date-format contains unsupported directive", result.stdout)
 
 
 if __name__ == "__main__":

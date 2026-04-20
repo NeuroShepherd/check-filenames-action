@@ -6,6 +6,7 @@ Opinionated GitHub Action to validate file and folder naming conventions with an
 
 - Enforces lowercase kebab-case names
 - Enforces letters and dashes only in names
+- Optionally allows one date fragment in file stems
 - Enforces lowercase-only file extensions
 - Warns on long relative paths (default limit: 65)
 - Warns on deep file nesting (default max depth: 2)
@@ -26,6 +27,19 @@ Examples:
 - Valid: `readme.md`, `my-folder/my-file.html`
 - Invalid: `MyFile.md`, `my_file.md`, `my-file2.md`
 
+Optional date mode:
+
+- Enable `allow-dates-in-file-names: "true"` to allow one date fragment in each file stem.
+- The default date format is `%Y-%m-%d`.
+- Use `date-format` to change the expected format (for example `%Y%m%d` or `%d-%m-%Y`).
+
+Examples when enabled with matching format:
+
+- `2020-05-01-filename.html` with `%Y-%m-%d`
+- `2022-12-filename.css` with `%Y-%m`
+- `something-30-12-2025.md` with `%d-%m-%Y`
+- `20220511-name.html` with `%Y%m%d`
+
 ## Inputs
 
 - `max-path-length`: warn when path is longer than this value (default: `65`)
@@ -33,6 +47,8 @@ Examples:
 - `file-types`: comma-separated extensions to check, or `all` (default: `all`)
 - `ignore-file`: ignore file path relative to repository root (default: `.filenameignore`)
 - `dotfile-mode`: dotfile handling mode, either `strip-leading-dot` or `ignore` (default: `strip-leading-dot`)
+- `allow-dates-in-file-names`: allow one date fragment in file stems (default: `false`)
+- `date-format`: date format for allowed filename date fragments (default: `%Y-%m-%d`)
 
 ## Usage
 
@@ -59,6 +75,8 @@ jobs:
           file-types: "html,md"
           ignore-file: ".filenameignore"
           dotfile-mode: "strip-leading-dot"
+          allow-dates-in-file-names: "false"
+          date-format: "%Y-%m-%d"
 ```
 
 Dotfile modes:

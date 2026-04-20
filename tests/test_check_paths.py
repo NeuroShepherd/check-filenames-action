@@ -130,7 +130,14 @@ class NameValidationTests(unittest.TestCase):
         self.assertEqual(issues, [])
 
     def test_dotfile_name_strip_mode(self) -> None:
-        issues = check_paths.check_file_name(Path(".env"), "strip-leading-dot")
+        pattern = check_paths.build_date_pattern("%Y-%m-%d")
+        issues = check_paths.check_file_name(
+            Path(".env"),
+            "strip-leading-dot",
+            False,
+            "%Y-%m-%d",
+            pattern,
+        )
         self.assertEqual(issues, [])
 
     def test_directory_name_strip_mode(self) -> None:

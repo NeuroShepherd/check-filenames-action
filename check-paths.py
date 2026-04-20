@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 import fnmatch
 import os
 from dataclasses import dataclass
@@ -15,6 +16,15 @@ import sys
 
 VALID_NAME_PATTERN = re.compile(r"^[a-z]+(?:-[a-z]+)*$")
 VALID_EXTENSION_PATTERN = re.compile(r"^[a-z]+$")
+DEFAULT_DATE_FORMAT = "%Y-%m-%d"
+SUPPORTED_DATE_DIRECTIVES: dict[str, str] = {
+    "%Y": r"\d{4}",
+    "%m": r"(?:0[1-9]|1[0-2])",
+    "%d": r"(?:0[1-9]|[12]\d|3[01])",
+    "%H": r"(?:[01]\d|2[0-3])",
+    "%M": r"[0-5]\d",
+    "%S": r"[0-5]\d",
+}
 
 
 @dataclass
@@ -154,17 +164,87 @@ def check_kebab_case(name: str) -> bool:
     return bool(VALID_NAME_PATTERN.fullmatch(name))
 
 
+def parse_bool(value: str) -> bool:
+    normalized = value.strip().lower()
+    if normalized in {"true", "1", "yes", "y", "on"}:
+        return True
+    if normalized in {"false", "0", "no", "n", "off"}:
+        return False
+    raise argparse.ArgumentTypeError(
+        "expected a boolean value (true/false, yes/no, 1/0)"
+    )
+
+
+def build_date_pattern(date_format: str) -> re.Pattern[str]:
+    pattern_parts: list[str] = []
+    index = 0
+
+    while index < len(date_format):
+        char = date_format[index]
+        if char == "%":
+            token = date_format[index : index + 2]
+            if len(token) < 2 or token not in SUPPORTED_DATE_DIRECTIVES:
+                raise ValueError(
+                    "date-format contains unsupported directive; "
+                    "supported directives are %Y, %m, %d, %H, %M, %S"
+                )
+            pattern_parts.append(SUPPORTED_DATE_DIRECTIVES[token])
+            index += 2
+            continue
+
+        pattern_parts.append(re.escape(char))
+        index += 1
+
+    return re.compile("".join(pattern_parts))
+
+
+def _is_date_boundary_valid(stem: str, start: int, end: int) -> bool:
+    before_ok = start == 0 or stem[start - 1] == "-"
+    after_ok = end == len(stem) or stem[end] == "-"
+    return before_ok and after_ok
+
+
+def contains_valid_date_fragment(
+    stem: str, date_format: str, date_pattern: re.Pattern[str]
+) -> bool:
+    for match in date_pattern.finditer(stem):
+        start, end = match.span()
+        if not _is_date_boundary_valid(stem, start, end):
+            continue
+
+        try:
+            datetime.strptime(match.group(0), date_format)
+        except ValueError:
+            continue
+
+        normalized = f"{stem[:start]}date{stem[end:]}"
+        if check_kebab_case(normalized):
+            return True
+
+    return False
+
+
 def normalize_dot_name(name: str, dotfile_mode: str) -> str:
     if dotfile_mode == "strip-leading-dot" and name.startswith("."):
         return name[1:]
     return name
 
 
-def check_file_name(path: Path, dotfile_mode: str) -> list[str]:
+def check_file_name(
+    path: Path,
+    dotfile_mode: str,
+    allow_dates_in_file_names: bool,
+    date_format: str,
+    date_pattern: re.Pattern[str],
+) -> list[str]:
     issues: list[str] = []
     stem = normalize_dot_name(path.stem, dotfile_mode)
 
-    if not check_kebab_case(stem):
+    stem_is_valid = check_kebab_case(stem)
+    if not stem_is_valid and allow_dates_in_file_names:
+        stem_is_valid = contains_valid_date_fragment(stem, date_format, date_pattern)
+
+    if not stem_is_valid:
         issues.append(
             "filename stem must use lowercase kebab-case with letters and dashes only"
         )
@@ -222,6 +302,17 @@ def main() -> int:
         choices=["strip-leading-dot", "ignore"],
         help="How to handle dot-prefixed names: strip-leading-dot or ignore",
     )
+    parser.add_argument(
+        "--allow-dates-in-file-names",
+        type=parse_bool,
+        default=False,
+        help="Allow one date fragment in a filename stem (default: false)",
+    )
+    parser.add_argument(
+        "--date-format",
+        default=DEFAULT_DATE_FORMAT,
+        help="Date format for allowed filename date fragments (default: %Y-%m-%d)",
+    )
 
     args = parser.parse_args()
     if args.max_path_length < 1:
@@ -234,6 +325,12 @@ def main() -> int:
     root = Path(args.root).resolve()
     if not root.exists() or not root.is_dir():
         print(f"::error::root path does not exist or is not a directory: {root}")
+        return 2
+
+    try:
+        date_pattern = build_date_pattern(args.date_format)
+    except ValueError as error:
+        print(f"::error::{error}")
         return 2
 
     file_types = parse_file_types(args.file_types)
@@ -276,7 +373,13 @@ def main() -> int:
 
             checked_file_count += 1
 
-            for issue in check_file_name(file_path, args.dotfile_mode):
+            for issue in check_file_name(
+                file_path,
+                args.dotfile_mode,
+                args.allow_dates_in_file_names,
+                args.date_format,
+                date_pattern,
+            ):
                 findings.append(Finding("error", rel_file, issue))
 
             parent = file_path.relative_to(root).parent

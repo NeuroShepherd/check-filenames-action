@@ -311,7 +311,7 @@ def main() -> int:
     parser.add_argument(
         "--date-format",
         default=DEFAULT_DATE_FORMAT,
-        help="Date format for allowed filename date fragments (default: %Y-%m-%d)",
+        help="Date format for allowed filename date fragments (default: %(default)s)",
     )
 
     args = parser.parse_args()

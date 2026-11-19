@@ -229,6 +229,20 @@ class CLITests(unittest.TestCase):
             self.assertEqual(result.returncode, 2, msg=result.stdout + result.stderr)
             self.assertIn("::error::date-format contains unsupported directive", result.stdout)
 
+    def test_cli_help_renders(self) -> None:
+        # argparse expands help strings with %-formatting, and from Python 3.14 it
+        # validates them at add_argument() time. A bare "%Y" in a help string
+        # therefore aborts the script before any argument parsing happens.
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT_PATH), "--help"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(result.returncode, 0, msg=result.stdout + result.stderr)
+        self.assertIn("%Y-%m-%d", " ".join(result.stdout.split()))
+
 
 if __name__ == "__main__":
     unittest.main()
